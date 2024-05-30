@@ -1,0 +1,137 @@
+---
+title: "Visualización de datos de felidos de Costa Rica"
+author: "Franchesca Moraga"
+format: html
+editor: visual
+toc: true
+lang: es
+theme: solar
+---
+
+# Carga de paquetes
+
+```{r}
+#| label: carga-paquete
+#| message: false
+#| warning: false 
+
+library(DT)
+library(tidyverse)
+library(sf)
+library(plotly)
+library(leaflet)
+library(leaflet.extras)
+library(leafem)
+```
+
+# Carga de datos
+```{r}
+#| label: carga-datos
+
+provincias <-
+  st_read("provincias.geojson", quiet = TRUE)
+
+felidos <-
+  st_read(
+    "felidos.csv",
+    options = c ("X_POSSIBLE_NAMES=decimalLongitude",
+                 "Y_POSSIBLE_NAMES=decimalLatitude")
+  )
+quiet = TRUE 
+```
+
+## Simplificacion de geometrias de provincias
+```{r}
+provincias <-
+  provincias |>
+  st_simplify(dTolerance = 500, preserveTopology = TRUE)
+
+# Mapa de la capa de provincias con simplificación y sin preservación de topología
+plot(
+  provincias$geometry,
+  extent = st_bbox(c(xmin = 280000, xmax = 660000, ymin = 880000, ymax= 1250000)),  
+  main = "Provincias simplificadas sin preservación de topología",
+  axes = TRUE,
+  graticule = TRUE)
+```
+
+
+# Cambio de sistemas de cordenadas
+```{r}
+#| label: cambios - crs
+
+provincias <-
+  provincias |>
+  st_transform(4326)
+
+st_crs(felidos) <- 4326
+```
+
+# Visualizacion
+
+## Tabla
+
+```{r}
+#| label: tabla-felidos
+#| code-fold: true
+
+felidos |>
+  st_drop_geometry() |>
+  select(species, eventDate, stateProvince, locality, decimalLatitude, decimalLongitude) |>
+  datatable( c ( "Especie","Fecha","Provincia","Localidad","Longitud", " Latitud"), 
+    options = list(
+    pageLength = 5,
+    language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Spanish.json')
+  )
+  )
+```
+
+## Gráfico
+
+```{r}
+#| label: grafico-registro-x-especie
+#| code-fold: true
+grafico_ggplot2 <-
+felidos |>
+  ggplot(aes(x = fct_infreq(species))) +
+  geom_bar() +
+  ggtitle("Cantidad de registros por especie") +
+  xlab("Especie") +
+  ylab ("Cantidad de registros") + 
+  theme_minimal()
+  
+  ggplotly(grafico_ggplot2) |> config(locale = "es")
+```
+
+## Mapa
+
+```{r}
+#| label: mapa-felidos
+#| code-fold: true
+
+leaflet() |>
+  setView(lng = -84.0,lat = 10, zoom = 7) |>
+  addTiles("Mapa de Calles") |>
+  addProviderTiles(providers$OpenTopoMap, "Mapa topográfico") |>
+  addPolygons(
+    data = provincias,
+    color = "red",
+    fillColor = "transparet",
+    weight = 1.5,
+    stroke = TRUE,
+    group = "provincias"
+  ) |>
+  addCircleMarkers(
+    data = felidos,
+    color = "orange",
+    stroke = FALSE,
+    radius = 4,
+    opacity = 0.5,
+    group = "felidos"
+  ) |>
+  addLayersControl(
+    baseGroups = c("Mapa de Calles", "Mapa topográfico"),
+    overlayGroups = c("Provincias", "Felidos")
+  )
+```
+
